@@ -9,8 +9,8 @@ var settings = [						//Some settings.
 	true,								//Colorize GB mode?
 	false,								//Disallow typed arrays?
 	8,									//Interval for the emulator loop.
-	10,									//Audio buffer minimum span amount over x interpreter iterations.
-	20,									//Audio buffer maximum span amount over x interpreter iterations.
+	16,									//Audio buffer minimum span amount over x interpreter iterations.
+	32,									//Audio buffer maximum span amount over x interpreter iterations.
 	false,								//Override to allow for MBC1 instead of ROM only (compatibility for broken 3rd-party cartridges).
 	false,								//Override MBC RAM disabling and always allow reading and writing to the banks.
 	false,								//Use the GameBoy boot ROM instead of the GameBoy Color boot ROM.
@@ -18,6 +18,9 @@ var settings = [						//Some settings.
 	true,								//Use image smoothing based scaling?
     [true, true, true, true]            //User controlled channel enables.
 ];
+var rAF = window.requestAnimationFrame || window.mozRequestAnimationFrame;
+var animHandle = false;
+
 function start(canvas, ROM, soundOn) {
 	settings[0] = !!soundOn;
 	clearLastEmulation();
@@ -36,11 +39,14 @@ function run() {
 			var dateObj = new Date();
 			gameboy.firstIteration = dateObj.getTime();
 			gameboy.iterations = 0;
-			gbRunInterval = setInterval(function () {
-				if (!document.hidden) {
-					gameboy.run();
-				}
-			}, settings[6]);
+			animHandle = true;
+		  gbRunInterval = rAF(function handleFunc() {
+				gameboy.run();
+				gameboy.run();
+				gameboy.run();
+				if(animHandle)
+				  gbRunInterval = rAF(handleFunc);
+			});
 		}
 		else {
 			cout("The GameBoy core is already running.", 1);
@@ -65,7 +71,7 @@ function pause() {
 }
 function clearLastEmulation() {
 	if (GameBoyEmulatorInitialized() && GameBoyEmulatorPlaying()) {
-		clearInterval(gbRunInterval);
+		animHandle = false;
 		gameboy.stopEmulator |= 2;
 		cout("The previous emulation has been cleared.", 0);
 	}

@@ -1,15 +1,12 @@
 {
-  "version": "0.0.4",
+  "version": "0.1.0",
   "name": "KaiBoy",
   "description": "Game Boy/Game Boy Color emulator for KaiOS",
   "type": "privileged",
   "permissions": {
-    "device-storage:sdcard":{ 
-      "access": "readonly",
-      "description": "ROM picking"
-    },
-    "storage": {
-      "description": "Save states"
+    "device-storage:sdcard":{
+      "access": "readwrite",
+      "description": "ROM picking and savestates"
     }
   },
   "origin": "app://kaiboy.831337.xyz",

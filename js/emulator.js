@@ -1,4 +1,4 @@
-; (function () {
+(function() {
 
   var mapping = {
     'ArrowUp': 'up',
@@ -21,88 +21,98 @@
   };
   var config = {}
   var parts = location.search.substr(1).split('&');
-  for (var i = 0; i < parts.length; i++) {
+  for(var i = 0; i < parts.length; i++) {
     var value = decodeURIComponent(parts[i].split('=')[1]);
-    if (!isNaN(parseInt(value))) {
+    if(!isNaN(parseInt(value))) {
       value = parseInt(value);
     }
     config[parts[i].split('=')[0]] = value;
   }
+  var saveSlotPrefix = 'kaiboy-saves'
 
   function updateTitle(gameTitle) {
     document.getElementById('title').querySelector('h1').textContent = 'KaiBoy: ' + gameTitle
   }
 
+  function reportStorageError(e) {
+    window.alert('Storage error: ' + e.name)
+    run()
+  }
+
   function saveToSlot(slotNum) {
-    if (GameBoyEmulatorInitialized()) {
-      pause()
-      if (window.confirm('Save to slot ' + slotNum + '?')) {
-        let gameName = gameboy.name
-        let slotName = 'KaiBoySaveSlot' + slotNum + '_' + gameName
-        let slotObject = gameboy.saveState()
-        try {
-          window.localStorage.setItem(slotName, JSON.stringify(slotObject))
-        } catch (e) {
-          window.alert('Couldn\'t save the state: ' + e.toString())
-        }
-        run()
-      }
-      run()
+    if(GameBoyEmulatorInitialized()) {
+     pause()
+     if(window.confirm('Save to slot '+slotNum+'?')) {
+       let gameName = gameboy.name
+       let slotName = 'KaiBoySaveSlot' + slotNum + '_' + gameName
+       let slotObject = gameboy.saveState()
+       let sdcard = navigator.getDeviceStorage('sdcard')
+       let slotPath = saveSlotPrefix + '/' + slotName
+       let slotBlob = new Blob([JSON.stringify(slotObject)], {type: 'application/json'})
+       let fetchRequest = sdcard.get(slotPath)
+       fetchRequest.onsuccess = function() {
+         let deleteRequest = sdcard.delete(this.result.name)
+         deleteRequest.onsuccess = function() {
+           let addRequest = sdcard.addNamed(slotBlob, slotPath)
+           addRequest.onsuccess = function() {
+             run()
+           }
+         addRequest.onerror = reportStorageError
+         }
+         deleteRequest.onerror = reportStorageError
+       }
+       fetchRequest.onerror = function() {
+         let addRequest = sdcard.addNamed(slotBlob, slotPath)
+         addRequest.onsuccess = function() {
+           run()
+         }
+         addRequest.onerror = reportStorageError
+       }
+     }
+     else run()
     }
   }
 
   function loadFromSlot(slotNum, canvas) {
-    if (GameBoyEmulatorInitialized()) {
-      pause()
-      if (window.confirm('Load from slot ' + slotNum + '?')) {
-        let gameName = gameboy.name
-        let slotName = 'KaiBoySaveSlot' + slotNum + '_' + gameName
-        let slotState = window.localStorage.getItem(slotName)
-        if (slotState) {
-          let slotObject = null
-          try {
-            slotObject = JSON.parse(slotState)
-          } catch (e) {
-            window.alert('Corrupt save data!')
-          }
-          if (slotObject) {
-            gameboy = new GameBoyCore(canvas, "")
-            gameboy.savedStateFileName = slotName
-            gameboy.returnFromState(slotObject)
-            run()
-          }
-          else run()
-        }
-        else {
-          window.alert('Nothing was saved to this slot yet!')
-          run()
-        }
-      }
-      else run()
+    if(GameBoyEmulatorInitialized()) {
+     pause()
+     if(window.confirm('Load from slot '+slotNum+'?')) {
+       let gameName = gameboy.name
+       let slotName = 'KaiBoySaveSlot' + slotNum + '_' + gameName
+       let sdcard = navigator.getDeviceStorage('sdcard')
+       let slotPath = saveSlotPrefix + '/' + slotName
+       let readRequest = sdcard.get(slotPath)
+       readRequest.onsuccess = function() {
+         let reader = new FileReader()
+         reader.onload = function(e) {
+            let slotObject = null
+            try {
+              slotObject = JSON.parse(reader.result)
+            } catch(e) {
+              window.alert('Corrupt save data!')
+            }
+           if(slotObject) {
+             gameboy = new GameBoyCore(canvas, "")
+             gameboy.savedStateFileName = slotName
+             gameboy.returnFromState(slotObject)
+             run()
+           }
+           else run()
+         }
+         reader.readAsBinaryString(this.result)
+       }
+       readRequest.onerror = function() {
+         window.alert('Empty slot or storage error')
+         run()
+       }
+     }
+     else run()
     }
-  }
-
-  function clearAllSlots() {
-    let emuInit = GameBoyEmulatorInitialized()
-    if (emuInit) pause()
-    if (window.confirm('Delete all save slots for all games?')) {
-      try {
-        for (let key in window.localStorage) {
-          if (key.startsWith('KaiBoySaveSlot')) {
-            window.localStorage.removeItem(key)
-          }
-        }
-      }
-      catch (e) {
-        window.alert('Error accessing the slot storage!')
-      }
-    }
-    if (emuInit) run()
   }
 
   function runGB(romBuffer) {
     var mainCanvas = document.getElementById('mainCanvas'),
-      KaiBoyMachinePaused = true
+        KaiBoyMachinePaused = true
 
     document.body.classList.add('ingame')
 
@@ -111,35 +121,34 @@
     document.getElementById('ok').innerHTML = '&nbsp;'
 
     function inGameMode(remapUp) {
-      window.onkeydown = function (e) {
-        if (e.key in mapping) {
+      window.onkeydown = function(e) {
+        if(e.key in mapping) {
           GameBoyKeyDown(mapping[e.key])
         }
-        else if (remapUp && e.key === 'Enter') {
+        else if(remapUp && e.key === 'Enter') {
           GameBoyKeyDown(mapping['ArrowUp'])
         }
-        else if (e.key === 'Call') {
-          if (!KaiBoyMachinePaused) {
-            KaiBoyMachinePaused = true
-            pause()
+        else if(e.key === 'Call') {
+          if(!KaiBoyMachinePaused) {
+           KaiBoyMachinePaused = true
+           pause()
           }
           else {
             KaiBoyMachinePaused = false
             run()
           }
         }
-        else if (e.key === '1') saveToSlot(1)
-        else if (e.key === '4') loadFromSlot(1, mainCanvas)
-        else if (e.key === '2') saveToSlot(2)
-        else if (e.key === '5') loadFromSlot(2, mainCanvas)
-        else if (e.key === '3') saveToSlot(3)
-        else if (e.key === '6') loadFromSlot(3, mainCanvas)
-        else if (e.key === '7') clearAllSlots()
-        else if (e.key === 'Backspace') {
+        else if(e.key === '1') saveToSlot(1)
+        else if(e.key === '4') loadFromSlot(1, mainCanvas)
+        else if(e.key === '2') saveToSlot(2)
+        else if(e.key === '5') loadFromSlot(2, mainCanvas)
+        else if(e.key === '3') saveToSlot(3)
+        else if(e.key === '6') loadFromSlot(3, mainCanvas)
+        else if(e.key === 'Backspace') {
           e.preventDefault()
           KaiBoyMachinePaused = true
           pause()
-          if (window.confirm('Exit KaiBoy?'))
+          if(window.confirm('Exit KaiBoy?'))
             window.close()
           else {
             KaiBoyMachinePaused = false
@@ -147,11 +156,11 @@
           }
         }
       }
-      window.onkeyup = function (e) {
-        if (e.key in mapping) {
+      window.onkeyup = function(e) {
+        if(e.key in mapping) {
           GameBoyKeyUp(mapping[e.key])
         }
-        else if (remapUp && e.key === 'Enter') {
+        else if(remapUp && e.key === 'Enter') {
           GameBoyKeyUp(mapping['ArrowUp'])
         }
       }
@@ -161,7 +170,7 @@
       console.log('ROM loaded:', gameboy.name)
       updateTitle(gameboy.name)
     }
-    if (window.screen.orientation.type !== 'landscape-primary') {
+    if(window.screen.orientation.type !== 'landscape-primary') {
       inGameMode(true)
     } else { //running on a QWERTY phone
       mapping = mappingForQwerty
@@ -170,13 +179,13 @@
   }
 
   var screenElement = document.getElementById('screen')
-  window.addEventListener('load', function () {
-    if (config.src) {
+  window.addEventListener('DOMContentLoaded', function() {
+    if(config.src) {
       screenElement.innerHTML = 'Loading&hellip;'
       var request = new XMLHttpRequest;
-      request.onload = function () {
+      request.onload = function() {
         let responseView = new Uint8ClampedArray(request.response), l = responseView.length, s = '';
-        for (let i = 0; i < l; i++)
+        for(let i=0;i<l;i++)
           s += String.fromCharCode(responseView[i])
         runGB(s);
       };
@@ -184,20 +193,21 @@
       request.responseType = 'arraybuffer'
       request.send();
     } else {
-      var pickKeyHandler = function (e) {
-        if (e.key === 'Enter' || e.key === 'Call') {
+      var pickKeyHandler = function(e) {
+        if(e.key === 'Enter' || e.key === 'Call') {
+          console.log('Calling picker')
           var picker = new MozActivity({
             name: "xyz.831337.kaiboy.pickFile",
             data: {}
           })
-          picker.onsuccess = function () {
+          picker.onsuccess = function() {
             screenElement.innerHTML = 'Loading&hellip;'
             let reader = new FileReader()
 
-            reader.onload = function (e) {
+            reader.onload = function(e) {
               window.removeEventListener('keydown', pickKeyHandler)
               let responseView = new Uint8ClampedArray(reader.result), l = responseView.length, s = '';
-              for (let i = 0; i < l; i++)
+              for(let i=0;i<l;i++)
                 s += String.fromCharCode(responseView[i])
               runGB(s);
             }
